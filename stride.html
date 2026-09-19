@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stride">
+<title>Stride — run/walk timer &amp; pace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF3F8; --surface:#FFFFFF; --ink:#14213D; --muted:#5B6B85; --line:#D6DEE9;
+  --run:#2F6BFF; --walk:#F5B21D; --rest:#7A8AA3; --on-run:#FFFFFF; --on-walk:#2A1E00;
+  --tap:#14213D; --on-tap:#FFFFFF; --danger:#C93A3A;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1626; --surface:#18233A; --ink:#F2F5FA; --muted:#9AA8C0; --line:#2A3A57;
+    --tap:#F2F5FA; --on-tap:#0E1626;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1626; --surface:#18233A; --ink:#F2F5FA; --muted:#9AA8C0; --line:#2A3A57;
+  --tap:#F2F5FA; --on-tap:#0E1626;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:"Barlow Semi Condensed",-apple-system,"Helvetica Neue",Arial,sans-serif;
+  background:var(--bg); color:var(--ink);
+  font-size:18px; line-height:1.35;
+  -webkit-font-smoothing:antialiased; -webkit-user-select:none; user-select:none;
+  overscroll-behavior:none;
+}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+input{-webkit-user-select:text;user-select:text}
+
+#app{height:100%;display:flex;flex-direction:column}
+main{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+.screen{display:none;min-height:100%}
+.screen.active{display:flex;flex-direction:column}
+
+nav{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  background:var(--surface);border-top:1px solid var(--line);
+  padding:6px 8px calc(6px + env(safe-area-inset-bottom));
+}
+nav button{padding:10px 4px 6px;border-radius:12px;font-weight:600;font-size:17px;color:var(--muted)}
+nav button.on{color:var(--ink);background:var(--bg)}
+nav button:focus-visible{outline:3px solid var(--run);outline-offset:-3px}
+
+/* ---------- RUN ---------- */
+#run{
+  padding:calc(20px + env(safe-area-inset-top)) 20px 24px;
+  transition:background .35s ease,color .35s ease;
+  background:var(--bg); color:var(--ink);
+  justify-content:space-between; text-align:center;
+}
+#run.phase-run{background:var(--run);color:var(--on-run)}
+#run.phase-walk{background:var(--walk);color:var(--on-walk)}
+#run .top{display:flex;justify-content:space-between;align-items:baseline;font-weight:600;font-size:19px;opacity:.9}
+#run .phase-name{font-size:44px;font-weight:800;letter-spacing:.01em;line-height:1;margin-top:18px}
+#run .phase-sub{font-size:19px;font-weight:500;opacity:.85;margin-top:8px;min-height:1.4em}
+#run .clock{font-size:min(36vw,180px);font-weight:800;line-height:.95;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin:10px 0 0}
+#run .clock-unit{font-size:22px;font-weight:600;opacity:.85;min-height:1.4em}
+#run .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:14px 0 18px}
+#run .stat{padding:10px 4px;border-radius:14px;background:rgba(0,0,0,.14)}
+#run.phase-idle .stat,#run.phase-done .stat{background:var(--surface)}
+#run .stat b{display:block;font-size:34px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+#run .stat span{display:block;font-size:15px;opacity:.85;margin-top:4px;font-weight:500}
+#run .gps-note{font-size:15px;opacity:.8;min-height:1.4em}
+#run .next{font-size:17px;font-weight:500;opacity:.85;margin-top:6px;min-height:1.4em}
+.big{display:block;width:100%;padding:22px;border-radius:22px;font-size:26px;font-weight:700;background:var(--tap);color:var(--on-tap)}
+#run.phase-run .big,#run.phase-walk .big{background:rgba(255,255,255,.92);color:#14213D}
+.big:active{transform:scale(.985)}
+.big:focus-visible{outline:3px solid currentColor;outline-offset:3px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.ghost{padding:16px;border-radius:18px;font-size:19px;font-weight:600;background:rgba(0,0,0,.14);color:inherit}
+#run.phase-idle .ghost,#run.phase-done .ghost{background:var(--surface)}
+#run .plan-summary{font-size:19px;font-weight:500;opacity:.9;margin-bottom:14px}
+#run .plan-summary strong{font-weight:700}
+
+/* ---------- shared ---------- */
+.pad{padding:calc(20px + env(safe-area-inset-top)) 20px 24px}
+h1{font-size:34px;font-weight:800;line-height:1.05;letter-spacing:-.01em}
+.lead{color:var(--muted);margin:6px 0 18px;font-size:18px}
+.card{background:var(--surface);border-radius:18px;padding:16px;margin-bottom:14px}
+.card h2{font-size:20px;font-weight:700;margin-bottom:10px}
+.card h2 small{font-weight:500;color:var(--muted);font-size:15px;margin-left:6px}
+.field{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.field:first-of-type{border-top:0}
+.field label{font-weight:600;font-size:19px}
+.field small{display:block;color:var(--muted);font-weight:500;font-size:15px}
+.stepper{display:flex;align-items:center;gap:4px}
+.stepper button{width:44px;height:44px;border-radius:12px;background:var(--bg);font-size:26px;font-weight:700;line-height:1}
+.stepper button:active{opacity:.7}
+.stepper output{min-width:70px;text-align:center;font-weight:700;font-size:22px;font-variant-numeric:tabular-nums}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:10px 14px;border-radius:999px;background:var(--bg);font-weight:600;font-size:16px;border:2px solid transparent}
+.chip.on{border-color:var(--run)}
+.total{display:flex;justify-content:space-between;font-size:19px;font-weight:600;padding-top:12px;border-top:1px solid var(--line);margin-top:6px}
+.total b{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums}
+.timeline{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:12px 0 4px;background:var(--line)}
+.timeline i{display:block;height:100%}
+.timeline .r{background:var(--run)} .timeline .w{background:var(--walk)}
+.legend{display:flex;gap:16px;color:var(--muted);font-size:15px;font-weight:500}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+.toggle{display:flex;background:var(--bg);border-radius:12px;padding:3px}
+.toggle button{flex:1;padding:8px 14px;border-radius:10px;font-weight:600;white-space:nowrap}
+.toggle button.on{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.hint{color:var(--muted);font-size:15px;margin-top:10px}
+.wide{width:100%;padding:14px;border-radius:14px;font-size:18px;font-weight:600;background:var(--bg);margin-top:10px}
+
+/* segment editor */
+.seg{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.seg:first-child{border-top:0}
+.seg .kind{width:56px;height:56px;border-radius:14px;font-weight:800;font-size:15px;color:#fff;line-height:1.05}
+.seg .kind.run{background:var(--run)} .seg .kind.walk{background:var(--walk);color:var(--on-walk)}
+.seg .amt{display:flex;flex-direction:column;gap:6px;min-width:0}
+.seg .amt .stepper{justify-content:flex-start}
+.seg .amt .stepper output{min-width:78px}
+.seg .mode{display:flex;gap:6px}
+.seg .mode button{padding:5px 10px;border-radius:999px;background:var(--bg);font-size:14px;font-weight:600;border:2px solid transparent}
+.seg .mode button.on{border-color:var(--ink)}
+.seg .tools{display:flex;flex-direction:column;gap:4px}
+.seg .tools button{width:40px;height:34px;border-radius:10px;background:var(--bg);font-size:18px;font-weight:700}
+.seg .tools .del{color:var(--danger)}
+
+/* pace */
+.calc{display:grid;gap:12px}
+.calc .box{background:var(--surface);border-radius:18px;padding:14px 16px}
+.calc label{display:block;font-weight:600;font-size:17px;color:var(--muted);margin-bottom:6px}
+.inputs{display:flex;align-items:baseline;gap:6px}
+.inputs input{width:100%;border:0;border-bottom:2px solid var(--line);background:none;padding:6px 2px;font-size:36px;font-weight:700;font-variant-numeric:tabular-nums;text-align:center;border-radius:0}
+.inputs input:focus{outline:none;border-color:var(--run)}
+.inputs span{font-size:22px;font-weight:600;color:var(--muted)}
+.inputs input.short{width:2.4em}
+.answer{background:var(--run);color:#fff;border-radius:18px;padding:16px;text-align:center}
+.answer .val{font-size:56px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.answer .lab{font-size:17px;opacity:.9;margin-top:6px;font-weight:500}
+.splits table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.splits td{padding:8px 4px;border-top:1px solid var(--line);font-size:18px}
+.splits td:last-child{text-align:right;font-weight:700}
+.splits td:first-child{color:var(--muted);font-weight:500}
+
+/* log */
+.totals{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+.totals div{background:var(--surface);border-radius:16px;padding:14px 8px;text-align:center}
+.totals b{display:block;font-size:34px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.totals span{display:block;color:var(--muted);font-size:15px;font-weight:500;margin-top:4px}
+.logrow{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.logrow:first-child{border-top:0}
+.logrow .d{font-weight:600}.logrow .d small{display:block;color:var(--muted);font-weight:500;font-size:15px}
+.logrow .m{font-weight:800;font-size:24px;text-align:right}
+.logrow .m small{display:block;font-size:14px;font-weight:500;color:var(--muted)}
+.logrow .x{width:36px;height:36px;border-radius:10px;background:var(--bg);color:var(--muted);font-weight:700}
+.empty{color:var(--muted);text-align:center;padding:24px 0}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app">
+<main>
+
+<!-- RUN -->
+<section id="run" class="screen active phase-idle" aria-live="polite">
+  <div class="top"><span id="run-title">Ready</span><span id="run-elapsed">0:00</span></div>
+  <div>
+    <div class="phase-name" id="phase-name">Run / walk</div>
+    <div class="phase-sub" id="phase-sub">Press start when you're at the line</div>
+    <div class="clock" id="clock">0:00</div>
+    <div class="clock-unit" id="clock-unit"></div>
+    <div class="next" id="next"></div>
+    <div class="stats">
+      <div class="stat"><b id="s-pace">–:––</b><span>pace now</span></div>
+      <div class="stat"><b id="s-avg">–:––</b><span>avg pace</span></div>
+      <div class="stat"><b id="s-dist">0.00</b><span id="s-dist-unit">miles</span></div>
+    </div>
+    <div class="gps-note" id="gps-note">GPS turns on when you start</div>
+  </div>
+  <div>
+    <div class="plan-summary" id="plan-summary"></div>
+    <button class="big" id="btn-main">Start</button>
+    <div class="row2" id="run-extra" hidden>
+      <button class="ghost" id="btn-skip">Skip ahead</button>
+      <button class="ghost" id="btn-end">End run</button>
+    </div>
+  </div>
+</section>
+
+<!-- PLAN -->
+<section id="plan" class="screen pad">
+  <h1>Your run/walk plan</h1>
+  <p class="lead">Each step can be a time or a distance. The timer follows it exactly.</p>
+
+  <div class="card">
+    <h2>Quick build <small>replaces the list below</small></h2>
+    <div class="field"><label>Measure by</label>
+      <div class="toggle" id="qb-mode"><button data-v="time">Time</button><button data-v="dist">Distance</button></div></div>
+    <div class="field"><label>Run</label>
+      <div class="stepper"><button data-k="run" data-d="-1" aria-label="Less run">−</button><output id="qb-run"></output><button data-k="run" data-d="1" aria-label="More run">+</button></div></div>
+    <div class="field"><label>Walk</label>
+      <div class="stepper"><button data-k="walk" data-d="-1" aria-label="Less walk">−</button><output id="qb-walk"></output><button data-k="walk" data-d="1" aria-label="More walk">+</button></div></div>
+    <div class="field"><label>Repeats</label>
+      <div class="stepper"><button data-k="reps" data-d="-1" aria-label="Fewer repeats">−</button><output id="qb-reps"></output><button data-k="reps" data-d="1" aria-label="More repeats">+</button></div></div>
+    <div class="field"><label>Warm-up walk<small>by time</small></label>
+      <div class="stepper"><button data-k="warm" data-d="-1" aria-label="Shorter warm-up">−</button><output id="qb-warm"></output><button data-k="warm" data-d="1" aria-label="Longer warm-up">+</button></div></div>
+    <div class="field"><label>Cool-down walk<small>by time</small></label>
+      <div class="stepper"><button data-k="cool" data-d="-1" aria-label="Shorter cool-down">−</button><output id="qb-cool"></output><button data-k="cool" data-d="1" aria-label="Longer cool-down">+</button></div></div>
+    <button class="wide" id="qb-apply">Use this pattern</button>
+    <div class="chips" id="presets" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Steps <small>edit any, add, remove, reorder</small></h2>
+    <div id="segs"></div>
+    <div class="row2">
+      <button class="wide" id="add-run" style="margin-top:12px">+ Run step</button>
+      <button class="wide" id="add-walk" style="margin-top:12px">+ Walk step</button>
+    </div>
+    <div class="timeline" id="timeline"></div>
+    <div class="legend"><span><i style="background:var(--run)"></i>run</span><span><i style="background:var(--walk)"></i>walk</span></div>
+    <div class="total"><span id="total-label">Total</span><b id="v-total"></b></div>
+  </div>
+
+  <div class="card">
+    <h2>Cues</h2>
+    <div class="field"><label>Voice<small>says "Run" and "Walk" out loud</small></label>
+      <div class="toggle" id="t-voice"><button data-v="1">On</button><button data-v="0">Off</button></div></div>
+    <div class="field"><label>Countdown<small>"three, two, one" before each switch</small></label>
+      <div class="toggle" id="t-count"><button data-v="1">On</button><button data-v="0">Off</button></div></div>
+    <div class="field"><label>Beep</label>
+      <div class="toggle" id="t-beep"><button data-v="1">On</button><button data-v="0">Off</button></div></div>
+    <div class="field"><label>Distance in</label>
+      <div class="toggle" id="t-unit"><button data-v="mi">Miles</button><button data-v="km">Kilometers</button></div></div>
+    <button class="wide" id="test-voice">Test the voice</button>
+  </div>
+  <p class="hint">Tip: in Safari tap Share, then "Add to Home Screen" so this opens like a regular app. Keep the phone unlocked or the screen on during a run so cues keep playing.</p>
+</section>
+
+<!-- PACE -->
+<section id="pace" class="screen pad">
+  <h1>Pace check</h1>
+  <p class="lead">Fill in any two and the third is worked out.</p>
+  <div class="calc">
+    <div class="box"><label>Distance (<span class="unit-word-pl">miles</span>)</label>
+      <div class="inputs"><input id="c-dist" inputmode="decimal" placeholder="3.1"></div></div>
+    <div class="box"><label>Time</label>
+      <div class="inputs"><input id="c-h" class="short" inputmode="numeric" placeholder="0"><span>h</span><input id="c-m" class="short" inputmode="numeric" placeholder="30"><span>m</span><input id="c-s" class="short" inputmode="numeric" placeholder="00"><span>s</span></div></div>
+    <div class="box"><label>Pace (min per <span class="unit-word">mile</span>)</label>
+      <div class="inputs"><input id="c-pm" class="short" inputmode="numeric" placeholder="10"><span>:</span><input id="c-ps" class="short" inputmode="numeric" placeholder="00"></div></div>
+    <div class="answer" id="answer"><div class="val" id="a-val">–</div><div class="lab" id="a-lab">Enter two of the three above</div></div>
+    <div class="chips" id="quick"></div>
+    <div class="splits card" id="splits" hidden><h2>Finish times at this pace</h2><table id="splits-table"></table></div>
+    <button class="ghost" id="c-clear" style="background:var(--surface)">Clear</button>
+  </div>
+</section>
+
+<!-- LOG -->
+<section id="log" class="screen pad">
+  <h1>Your miles</h1>
+  <p class="lead">Every finished run is saved here on this phone.</p>
+  <div class="totals">
+    <div><b id="tot-all">0</b><span id="tot-all-l">miles total</span></div>
+    <div><b id="tot-week">0</b><span>this week</span></div>
+    <div><b id="tot-runs">0</b><span>runs</span></div>
+  </div>
+  <div class="card">
+    <h2>Add a run by hand</h2>
+    <div class="inputs" style="align-items:center;gap:10px">
+      <input id="m-dist" inputmode="decimal" placeholder="miles" style="font-size:24px">
+      <input id="m-min" class="short" inputmode="numeric" placeholder="min" style="font-size:24px">
+      <button class="chip" id="m-add">Add</button>
+    </div>
+    <p class="hint">For treadmill days or runs without the phone.</p>
+  </div>
+  <div class="card"><div id="log-list"></div></div>
+</section>
+
+</main>
+<nav>
+  <button data-go="run" class="on">Run</button>
+  <button data-go="plan">Plan</button>
+  <button data-go="pace">Pace</button>
+  <button data-go="log">Log</button>
+</nav>
+</div>
+
+<script>
+(function(){
+'use strict';
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const store={
+  get(k,d){try{const v=localStorage.getItem('stride:'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+  set(k,v){try{localStorage.setItem('stride:'+k,JSON.stringify(v))}catch(e){}}
+};
+const fmt=s=>{s=Math.max(0,Math.round(s));const m=Math.floor(s/60),x=s%60;return m+':'+String(x).padStart(2,'0')};
+const fmtLong=s=>{s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h?`${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`:fmt(s)};
+const fmtPace=secPer=>(!isFinite(secPer)||secPer<=0||secPer>3600)?'–:––':fmt(secPer);
+
+/* ---------- prefs ---------- */
+let prefs=store.get('prefs',{voice:1,beep:1,count:1,unit:'mi'});
+const unitM=()=>prefs.unit==='mi'?1609.344:1000;
+const unitName=(n)=>prefs.unit==='mi'?(n===1?'mile':'miles'):(n===1?'kilometer':'kilometers');
+const unitAbbr=()=>prefs.unit==='mi'?'mi':'km';
+function speakAmount(seg){
+  if(seg.mode==='time'){const m=Math.floor(seg.val/60),s=seg.val%60;
+    const parts=[];if(m)parts.push(m+(m===1?' minute':' minutes'));if(s)parts.push(s+' seconds');return parts.join(' ')}
+  const v=seg.val;
+  if(v===0.5)return 'half a '+unitName(1);
+  if(v===0.25)return 'a quarter '+unitName(1);
+  if(v===0.75)return 'three quarters of a '+unitName(1);
+  return v+' '+unitName(v);
+}
+function showAmount(seg){return seg.mode==='time'?fmt(seg.val):seg.val.toFixed(2).replace(/\.?0+$/,'')+' '+unitAbbr()}
+
+/* ---------- plan: a list of steps ---------- */
+// step: {k:'run'|'walk', mode:'time'|'dist', val: seconds | distance units}
+let steps=store.get('steps',null);
+if(!steps){steps=[];steps.push({k:'walk',mode:'time',val:300});for(let i=0;i<10;i++){steps.push({k:'run',mode:'time',val:60});steps.push({k:'walk',mode:'time',val:60})}steps.push({k:'walk',mode:'time',val:300})}
+let qb=store.get('qb',{mode:'time',run:60,walk:60,reps:10,warm:300,cool:300,runD:0.25,walkD:0.1});
+const presets=[
+  {name:'Beginner 1 / 1',mode:'time',run:60,walk:60,reps:10,warm:300,cool:300},
+  {name:'Build 2 / 1',mode:'time',run:120,walk:60,reps:8,warm:300,cool:300},
+  {name:'Steady 4 / 1',mode:'time',run:240,walk:60,reps:6,warm:300,cool:300},
+  {name:'30s / 30s',mode:'time',run:30,walk:30,reps:20,warm:300,cool:300},
+  {name:'Long 8 / 2',mode:'time',run:480,walk:120,reps:4,warm:300,cool:300},
+  {name:'¼ mi run / 0.1 walk',mode:'dist',runD:0.25,walkD:0.1,reps:8,warm:300,cool:300},
+];
+function buildFromQB(){
+  const out=[];
+  if(qb.warm>0)out.push({k:'walk',mode:'time',val:qb.warm});
+  for(let i=1;i<=qb.reps;i++){
+    out.push(qb.mode==='time'?{k:'run',mode:'time',val:qb.run}:{k:'run',mode:'dist',val:qb.runD});
+    if(i<qb.reps)out.push(qb.mode==='time'?{k:'walk',mode:'time',val:qb.walk}:{k:'walk',mode:'dist',val:qb.walkD});
+  }
+  if(qb.cool>0)out.push({k:'walk',mode:'time',val:qb.cool});
+  return out;
+}
+const distStep=v=>v<0.5?0.05:0.25;
+function renderQB(){
+  $$('#qb-mode button').forEach(b=>b.classList.toggle('on',b.dataset.v===qb.mode));
+  $('#qb-run').textContent=qb.mode==='time'?fmt(qb.run):qb.runD.toFixed(2).replace(/\.?0+$/,'')+' '+unitAbbr();
+  $('#qb-walk').textContent=qb.mode==='time'?fmt(qb.walk):qb.walkD.toFixed(2).replace(/\.?0+$/,'')+' '+unitAbbr();
+  $('#qb-reps').textContent=qb.reps;$('#qb-warm').textContent=fmt(qb.warm);$('#qb-cool').textContent=fmt(qb.cool);
+  $$('#presets .chip').forEach(c=>{const p=presets[+c.dataset.i];c.classList.toggle('on',JSON.stringify(buildFromQBof(p))===JSON.stringify(steps))});
+  store.set('qb',qb);
+}
+function buildFromQBof(p){const keep=qb;qb={...qb,...p};const s=buildFromQB();qb=keep;return s}
+$('#qb-mode').addEventListener('click',e=>{const b=e.target.closest('button');if(b){qb.mode=b.dataset.v;renderQB()}});
+$$('#plan .card:first-of-type .stepper button').forEach(b=>b.addEventListener('click',()=>{
+  const k=b.dataset.k,d=+b.dataset.d;
+  if(k==='reps')qb.reps=Math.min(60,Math.max(1,qb.reps+d));
+  else if(k==='warm'||k==='cool')qb[k]=Math.min(1800,Math.max(0,qb[k]+d*60));
+  else if(qb.mode==='time'){const key=k;qb[key]=Math.min(3600,Math.max(k==='run'?15:0,qb[key]+d*15))}
+  else{const key=k+'D';const st=distStep(d>0?qb[key]:qb[key]-0.001);qb[key]=Math.round(Math.min(10,Math.max(0.05,qb[key]+d*st))*100)/100}
+  renderQB();
+}));
+$('#qb-apply').addEventListener('click',()=>{steps=buildFromQB();renderSteps();say('Pattern saved')});
+$('#presets').innerHTML=presets.map((p,i)=>`<button class="chip" data-i="${i}">${p.name}</button>`).join('');
+$('#presets').addEventListener('click',e=>{const c=e.target.closest('.chip');if(!c)return;const p={...presets[+c.dataset.i]};delete p.name;qb={...qb,...p};steps=buildFromQB();renderQB();renderSteps()});
+
+function renderSteps(){
+  const box=$('#segs');
+  box.innerHTML=steps.map((s,i)=>`
+    <div class="seg" data-i="${i}">
+      <button class="kind ${s.k}" data-act="kind" aria-label="Switch run/walk">${s.k==='run'?'RUN':'WALK'}</button>
+      <div class="amt">
+        <div class="stepper"><button data-act="dec" aria-label="Less">−</button><output>${showAmount(s)}</output><button data-act="inc" aria-label="More">+</button></div>
+        <div class="mode"><button data-act="mode" data-v="time" class="${s.mode==='time'?'on':''}">Time</button><button data-act="mode" data-v="dist" class="${s.mode==='dist'?'on':''}">Distance</button></div>
+      </div>
+      <div class="tools"><button data-act="up" aria-label="Move up">↑</button><button data-act="down" aria-label="Move down">↓</button><button data-act="del" class="del" aria-label="Remove">×</button></div>
+    </div>`).join('')||'<p class="empty">No steps yet. Add a run or walk step below.</p>';
+  // timeline: weight time steps by seconds, distance steps by an assumed 12 min pace so both show
+  const w=s=>s.mode==='time'?s.val:s.val*720;
+  const tot=steps.reduce((a,s)=>a+w(s),0)||1;
+  $('#timeline').innerHTML=steps.map(s=>`<i class="${s.k==='run'?'r':'w'}" style="width:${100*w(s)/tot}%"></i>`).join('');
+  const tSec=steps.filter(s=>s.mode==='time').reduce((a,s)=>a+s.val,0);
+  const tDist=steps.filter(s=>s.mode==='dist').reduce((a,s)=>a+s.val,0);
+  const parts=[];if(tSec)parts.push(fmtLong(tSec));if(tDist)parts.push(tDist.toFixed(2).replace(/\.?0+$/,'')+' '+unitAbbr());
+  $('#v-total').textContent=parts.join(' + ')||'0:00';
+  $('#total-label').textContent=(tSec&&tDist)?'Timed steps + distance steps':'Total';
+  const runs=steps.filter(s=>s.k==='run').length;
+  $('#plan-summary').innerHTML=`<strong>${steps.length} steps, ${runs} runs</strong>${parts.length?' · '+parts.join(' + '):''}`;
+  renderQB();store.set('steps',steps);
+}
+$('#segs').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  const i=+b.closest('.seg').dataset.i,s=steps[i],act=b.dataset.act;
+  if(act==='kind')s.k=s.k==='run'?'walk':'run';
+  else if(act==='mode'){if(s.mode!==b.dataset.v){s.mode=b.dataset.v;s.val=s.mode==='time'?60:0.25}}
+  else if(act==='inc'||act==='dec'){const d=act==='inc'?1:-1;
+    if(s.mode==='time')s.val=Math.min(7200,Math.max(15,s.val+d*15));
+    else{const st=distStep(d>0?s.val:s.val-0.001);s.val=Math.round(Math.min(26.3,Math.max(0.05,s.val+d*st))*100)/100}}
+  else if(act==='up'&&i>0){[steps[i-1],steps[i]]=[steps[i],steps[i-1]]}
+  else if(act==='down'&&i<steps.length-1){[steps[i+1],steps[i]]=[steps[i],steps[i+1]]}
+  else if(act==='del')steps.splice(i,1);
+  renderSteps();
+});
+$('#add-run').addEventListener('click',()=>{steps.push({k:'run',mode:'time',val:60});renderSteps()});
+$('#add-walk').addEventListener('click',()=>{steps.push({k:'walk',mode:'time',val:60});renderSteps()});
+
+function renderPrefs(){
+  $$('#t-voice button').forEach(b=>b.classList.toggle('on',+b.dataset.v===+prefs.voice));
+  $$('#t-count button').forEach(b=>b.classList.toggle('on',+b.dataset.v===+prefs.count));
+  $$('#t-beep button').forEach(b=>b.classList.toggle('on',+b.dataset.v===+prefs.beep));
+  $$('#t-unit button').forEach(b=>b.classList.toggle('on',b.dataset.v===prefs.unit));
+  $$('.unit-word').forEach(e=>e.textContent=prefs.unit==='mi'?'mile':'km');
+  $$('.unit-word-pl').forEach(e=>e.textContent=prefs.unit==='mi'?'miles':'km');
+  $('#s-dist-unit').textContent=prefs.unit==='mi'?'miles':'km';
+  $('#tot-all-l').textContent=(prefs.unit==='mi'?'miles':'km')+' total';
+  $('#m-dist').placeholder=prefs.unit==='mi'?'miles':'km';
+  store.set('prefs',prefs);
+}
+$('#t-voice').addEventListener('click',e=>{const b=e.target.closest('button');if(b){prefs.voice=+b.dataset.v;renderPrefs()}});
+$('#t-count').addEventListener('click',e=>{const b=e.target.closest('button');if(b){prefs.count=+b.dataset.v;renderPrefs()}});
+$('#t-beep').addEventListener('click',e=>{const b=e.target.closest('button');if(b){prefs.beep=+b.dataset.v;renderPrefs()}});
+$('#t-unit').addEventListener('click',e=>{const b=e.target.closest('button');if(b){prefs.unit=b.dataset.v;renderPrefs();renderSteps();renderQB();calc();renderLog()}});
+$('#test-voice').addEventListener('click',()=>{beep('run');say('Run for two minutes')});
+
+/* ---------- audio / voice / wake lock ---------- */
+let actx=null;
+function beep(kind){
+  if(!prefs.beep)return;
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended')actx.resume();
+    const notes=kind==='run'?[660,880,1100]:kind==='walk'?[880,660,440]:kind==='tick'?[880]:[523,659,784,1046];
+    notes.forEach((f,i)=>{
+      const o=actx.createOscillator(),g=actx.createGain();
+      o.type='square';o.frequency.value=f;
+      const t=actx.currentTime+i*0.16;
+      g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.35,t+0.015);g.gain.exponentialRampToValueAtTime(0.0001,t+0.14);
+      o.connect(g).connect(actx.destination);o.start(t);o.stop(t+0.16);
+    });
+  }catch(e){}
+}
+let voice=null;
+function pickVoice(){try{const vs=speechSynthesis.getVoices();voice=vs.find(v=>/en[-_]US/i.test(v.lang)&&/Samantha|Ava|Allison|Google US/i.test(v.name))||vs.find(v=>/^en/i.test(v.lang))||null}catch(e){}}
+if('speechSynthesis' in window){pickVoice();speechSynthesis.onvoiceschanged=pickVoice}
+function say(text,urgent){
+  if(!prefs.voice||!('speechSynthesis' in window))return;
+  try{if(urgent!==false)speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);if(voice)u.voice=voice;u.rate=1;u.volume=1;speechSynthesis.speak(u)}catch(e){}
+}
+let wake=null;
+async function keepAwake(on){
+  try{
+    if(on&&'wakeLock' in navigator&&!wake){wake=await navigator.wakeLock.request('screen');wake.addEventListener('release',()=>{wake=null})}
+    else if(!on&&wake){await wake.release();wake=null}
+  }catch(e){}
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state==='running')keepAwake(true)});
+
+/* ---------- GPS ---------- */
+let watchId=null,points=[],distM=0,lastP=null,gpsOK=false;
+const R=6371000;
+function hav(a,b){const toR=x=>x*Math.PI/180;const dLat=toR(b.lat-a.lat),dLon=toR(b.lon-a.lon);const s=Math.sin(dLat/2)**2+Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(s))}
+function startGPS(){
+  if(!('geolocation' in navigator)){$('#gps-note').textContent='No GPS on this device — distance steps will not advance';return}
+  $('#gps-note').textContent='Finding GPS…';
+  watchId=navigator.geolocation.watchPosition(pos=>{
+    if(state!=='running')return;
+    const c=pos.coords;
+    if(c.accuracy>40){$('#gps-note').textContent='GPS signal weak — pace may lag';return}
+    const p={lat:c.latitude,lon:c.longitude,t:pos.timestamp};
+    if(lastP){
+      const d=hav(lastP,p),dt=(p.t-lastP.t)/1000;
+      if(d<=2)return; // standing still / jitter
+      if(dt>0&&d/dt<8)distM+=d; // ignore impossible jumps
+    }
+    lastP=p;points.push({t:p.t,d:distM});
+    while(points.length&&p.t-points[0].t>30000)points.shift();
+    gpsOK=true;$('#gps-note').textContent='GPS locked';
+  },err=>{
+    $('#gps-note').textContent=err.code===1?'Location is off — allow it in Settings to track distance':'GPS unavailable — timer still works';
+  },{enableHighAccuracy:true,maximumAge:1000,timeout:15000});
+}
+function stopGPS(){if(watchId!=null){navigator.geolocation.clearWatch(watchId);watchId=null}}
+function currentPace(){
+  if(points.length<2)return NaN;
+  const a=points[0],b=points[points.length-1];
+  const dd=b.d-a.d,dt=(b.t-a.t)/1000;
+  if(dd<5||dt<5)return NaN;
+  return dt/(dd/unitM());
+}
+
+/* ---------- workout engine ---------- */
+let state='idle';// idle | running | paused | done
+let segs=[],segIdx=0,segStart=0,segStartDist=0,pausedAt=0,runStart=0,pausedTotal=0,tick=null,countedTo=0;
+const runEl=$('#run');
+function setPhaseClass(k){runEl.className='screen active phase-'+k}
+function segLabel(s){return s.k==='run'?'Run':'Walk'}
+function showSeg(){
+  const s=segs[segIdx];
+  $('#phase-name').textContent=segLabel(s);
+  $('#phase-sub').textContent=`Step ${segIdx+1} of ${segs.length} · ${showAmount(s)}`;
+  setPhaseClass(s.k);
+  $('#run-title').textContent=`${segIdx+1} / ${segs.length}`;
+  const n=segs[segIdx+1];
+  $('#next').textContent=n?`Next: ${segLabel(n).toLowerCase()} ${showAmount(n)}`:'Last step';
+}
+function enterSeg(now){
+  segStart=now;segStartDist=distM;countedTo=0;showSeg();
+  const s=segs[segIdx];
+  beep(s.k);
+  say(`${segLabel(s)} for ${speakAmount(s)}`);
+}
+function segProgress(s){
+  if(s.mode==='time')return {left:s.val-(Date.now()-segStart)/1000,frac:(Date.now()-segStart)/1000/s.val};
+  const done=(distM-segStartDist)/unitM();return {left:s.val-done,frac:done/s.val};
+}
+function loop(){
+  const now=Date.now(),s=segs[segIdx];
+  const {left}=segProgress(s);
+  if(left<=0){
+    if(segIdx<segs.length-1){segIdx++;enterSeg(s.mode==='time'?segStart+s.val*1000:now);return loop()}
+    return finish();
+  }
+  if(s.mode==='time'){
+    $('#clock').textContent=fmt(Math.ceil(left));$('#clock-unit').textContent='';
+    if(prefs.count&&prefs.voice){const n=Math.ceil(left);if(n<=3&&n>=1&&countedTo!==n&&s.val>10){countedTo=n;say(String(n),true)}}
+  }else{
+    $('#clock').textContent=Math.max(0,left).toFixed(2);$('#clock-unit').textContent=unitAbbr()+' to go · '+fmt((now-segStart)/1000)+' in this step';
+    if(!gpsOK&&(now-segStart)>20000)$('#gps-note').textContent='Waiting on GPS — distance steps need it. Tap Skip ahead if needed.';
+  }
+  const el=(now-runStart-pausedTotal)/1000;
+  $('#run-elapsed').textContent=fmtLong(el);
+  $('#s-pace').textContent=fmtPace(currentPace());
+  $('#s-avg').textContent=fmtPace(distM>20?el/(distM/unitM()):NaN);
+  $('#s-dist').textContent=(distM/unitM()).toFixed(2);
+}
+function start(){
+  if(!steps.length){say('Add some steps to your plan first');$('#phase-sub').textContent='Your plan has no steps — set one up on the Plan tab';return}
+  segs=steps.map(s=>({...s}));
+  segIdx=0;distM=0;points=[];lastP=null;pausedTotal=0;gpsOK=false;
+  runStart=Date.now();state='running';
+  $('#btn-main').textContent='Pause';$('#run-extra').hidden=false;
+  beep('go');keepAwake(true);startGPS();
+  enterSeg(runStart);loop();tick=setInterval(loop,250);
+}
+function pause(){
+  state='paused';pausedAt=Date.now();clearInterval(tick);
+  $('#btn-main').textContent='Resume';$('#phase-sub').textContent='Paused';keepAwake(false);say('Paused');
+}
+function resume(){
+  const gap=Date.now()-pausedAt;segStart+=gap;pausedTotal+=gap;
+  state='running';showSeg();keepAwake(true);tick=setInterval(loop,250);loop();
+  $('#btn-main').textContent='Pause';say(segLabel(segs[segIdx]));
+}
+function skip(){
+  if(state==='idle'||state==='done')return;
+  if(segIdx<segs.length-1){segIdx++;if(state==='paused'){resume()}enterSeg(Date.now());loop()}else finish();
+}
+function finish(){
+  clearInterval(tick);state='done';stopGPS();keepAwake(false);
+  const el=(Date.now()-runStart-pausedTotal)/1000;
+  setPhaseClass('done');
+  $('#phase-name').textContent='Done';
+  $('#phase-sub').textContent=distM>20?`${(distM/unitM()).toFixed(2)} ${unitAbbr()} in ${fmtLong(el)}`:`${fmtLong(el)} on your feet`;
+  $('#clock').textContent=fmtLong(el);$('#clock-unit').textContent='';$('#next').textContent='';
+  $('#run-title').textContent='Finished';
+  $('#s-pace').textContent='–:––';
+  $('#btn-main').textContent='Start again';$('#run-extra').hidden=true;
+  beep('go');
+  const miles=distM/1609.344;
+  say(distM>20?`Done. ${miles.toFixed(2)} ${unitName(2)} in ${Math.round(el/60)} minutes. Nice work.`:'Done. Nice work.');
+  if(el>30){const log=store.get('log',[]);log.unshift({at:Date.now(),sec:Math.round(el),m:Math.round(distM),src:'gps'});store.set('log',log.slice(0,500));renderLog()}
+}
+function reset(){
+  state='idle';setPhaseClass('idle');
+  $('#phase-name').textContent='Run / walk';$('#phase-sub').textContent="Press start when you're at the line";
+  $('#clock').textContent='0:00';$('#clock-unit').textContent='';$('#next').textContent='';$('#run-title').textContent='Ready';$('#run-elapsed').textContent='0:00';
+  $('#s-pace').textContent='–:––';$('#s-avg').textContent='–:––';$('#s-dist').textContent='0.00';
+  $('#gps-note').textContent='GPS turns on when you start';
+  $('#btn-main').textContent='Start';$('#run-extra').hidden=true;
+}
+$('#btn-main').addEventListener('click',()=>{
+  if(state==='idle')start();else if(state==='running')pause();else if(state==='paused')resume();else{reset();start()}
+});
+$('#btn-skip').addEventListener('click',skip);
+$('#btn-end').addEventListener('click',()=>{if(state!=='idle'&&state!=='done')finish()});
+
+/* ---------- nav ---------- */
+$$('nav button').forEach(b=>b.addEventListener('click',()=>{
+  $$('nav button').forEach(x=>x.classList.toggle('on',x===b));
+  $$('.screen').forEach(s=>s.classList.toggle('active',s.id===b.dataset.go));
+  if(b.dataset.go==='run')runEl.className='screen active phase-'+(state==='running'||state==='paused'?segs[segIdx].k:state);
+  if(b.dataset.go==='log')renderLog();
+  document.querySelector('main').scrollTop=0;
+}));
+
+/* ---------- pace calculator ---------- */
+const ids=['c-dist','c-h','c-m','c-s','c-pm','c-ps'];
+let lastEdited=[];
+function num(id){const v=parseFloat($('#'+id).value);return isFinite(v)?v:0}
+function has(group){return group.some(id=>$('#'+id).value.trim()!=='')}
+function calc(){
+  const D=num('c-dist'),T=num('c-h')*3600+num('c-m')*60+num('c-s'),P=num('c-pm')*60+num('c-ps');
+  const hD=has(['c-dist']),hT=has(['c-h','c-m','c-s']),hP=has(['c-pm','c-ps']);
+  const u=prefs.unit==='mi'?'mile':'km',plural=prefs.unit==='mi'?'miles':'km';
+  let val='–',lab='Enter two of the three above',showSplits=false,paceSec=0;
+  const groups={dist:hD,time:hT,pace:hP};
+  const filled=Object.keys(groups).filter(k=>groups[k]);
+  let target=null;
+  if(filled.length>=2){
+    const missing=Object.keys(groups).filter(k=>!groups[k]);
+    target=missing[0]||['dist','time','pace'].find(k=>!lastEdited.slice(-2).includes(k))||'pace';
+  }
+  if(target==='pace'&&D>0&&T>0){paceSec=T/D;val=fmtPace(paceSec);lab=`per ${u}`;showSplits=true}
+  else if(target==='time'&&D>0&&P>0){val=fmtLong(D*P);lab=`to cover ${D} ${plural}`;paceSec=P;showSplits=true}
+  else if(target==='dist'&&T>0&&P>0){val=(T/P).toFixed(2);lab=`${plural} in ${fmtLong(T)}`;paceSec=P;showSplits=true}
+  $('#a-val').textContent=val;$('#a-lab').textContent=lab;
+  $('#splits').hidden=!showSplits;
+  if(showSplits){
+    const rows=prefs.unit==='mi'?[['1 mile',1],['5K',3.10686],['10K',6.21371],['Half marathon',13.1094],['Marathon',26.2188]]:[['1 km',1],['5K',5],['10K',10],['Half marathon',21.0975],['Marathon',42.195]];
+    $('#splits-table').innerHTML=rows.map(([n,d])=>`<tr><td>${n}</td><td>${fmtLong(d*paceSec)}</td></tr>`).join('');
+  }
+}
+ids.forEach(id=>$('#'+id).addEventListener('input',()=>{
+  const g=id==='c-dist'?'dist':id.startsWith('c-p')?'pace':'time';
+  lastEdited=lastEdited.filter(x=>x!==g);lastEdited.push(g);calc();
+}));
+$('#c-clear').addEventListener('click',()=>{ids.forEach(id=>$('#'+id).value='');lastEdited=[];calc()});
+const quick=[['5K',3.10686,5],['10K',6.21371,10],['Half',13.1094,21.0975]];
+$('#quick').innerHTML=quick.map((q,i)=>`<button class="chip" data-i="${i}">${q[0]}</button>`).join('');
+$('#quick').addEventListener('click',e=>{const c=e.target.closest('.chip');if(!c)return;const q=quick[+c.dataset.i];$('#c-dist').value=(prefs.unit==='mi'?q[1]:q[2]).toFixed(2).replace(/\.?0+$/,'');lastEdited=lastEdited.filter(x=>x!=='dist');lastEdited.push('dist');calc()});
+
+/* ---------- log ---------- */
+function renderLog(){
+  const log=store.get('log',[]);
+  const u=unitM();
+  const all=log.reduce((a,r)=>a+r.m,0)/u;
+  const now=new Date();const day=(now.getDay()+6)%7;const monday=new Date(now.getFullYear(),now.getMonth(),now.getDate()-day).getTime();
+  const week=log.filter(r=>r.at>=monday).reduce((a,r)=>a+r.m,0)/u;
+  $('#tot-all').textContent=all.toFixed(1);$('#tot-week').textContent=week.toFixed(1);$('#tot-runs').textContent=log.length;
+  $('#log-list').innerHTML=log.length?log.map((r,i)=>{
+    const d=new Date(r.at);const dist=r.m/u;
+    const pace=r.m>20?fmtPace(r.sec/dist):'–:––';
+    return `<div class="logrow" data-i="${i}"><div class="d">${d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}<small>${fmtLong(r.sec)} · ${pace} /${unitAbbr()}${r.src==='manual'?' · by hand':''}</small></div><div class="m">${dist.toFixed(2)}<small>${unitAbbr()}</small></div><button class="x" aria-label="Delete">×</button></div>`;
+  }).join(''):'<p class="empty">No runs yet. Finish one on the Run tab and it will land here.</p>';
+}
+$('#log-list').addEventListener('click',e=>{
+  const b=e.target.closest('.x');if(!b)return;
+  const i=+b.closest('.logrow').dataset.i;const log=store.get('log',[]);
+  if(confirm('Delete this run from your log?')){log.splice(i,1);store.set('log',log);renderLog()}
+});
+$('#m-add').addEventListener('click',()=>{
+  const d=parseFloat($('#m-dist').value),mn=parseFloat($('#m-min').value);
+  if(!(d>0))return;
+  const log=store.get('log',[]);log.unshift({at:Date.now(),sec:Math.round((mn>0?mn:0)*60),m:Math.round(d*unitM()),src:'manual'});store.set('log',log.slice(0,500));
+  $('#m-dist').value='';$('#m-min').value='';renderLog();
+});
+
+renderPrefs();renderSteps();reset();calc();renderLog();
+})();
+</script>
+</body>
+</html>
